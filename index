@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema Solar 3D - Three.js</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(circle at top, #0f1f3d 0%, #050814 45%, #02030a 100%);
+      color: #eef3ff;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .ui {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      z-index: 10;
+      width: min(340px, calc(100vw - 36px));
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(8, 12, 28, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+    }
+
+    .ui h1 {
+      margin: 0 0 8px;
+      font-size: 1.4rem;
+      line-height: 1.1;
+    }
+
+    .ui p {
+      margin: 0 0 14px;
+      color: #c8d3ff;
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .row {
+      display: grid;
+      gap: 6px;
+    }
+
+    .row label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.92rem;
+      color: #dce6ff;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: #8fb2ff;
+      cursor: pointer;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    button {
+      border: 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      background: linear-gradient(135deg, #dbe7ff, #93b6ff);
+      color: #081223;
+      box-shadow: 0 8px 24px rgba(80, 130, 255, 0.22);
+      transition: transform 0.18s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .hint {
+      margin-top: 14px;
+      font-size: 0.86rem;
+      color: #b9c7f7;
+      line-height: 1.45;
+    }
+
+    .planet-info {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.9rem;
+      color: #d8e2ff;
+    }
+
+    .planet-info strong {
+      color: #ffffff;
+    }
+
+    .credits {
+      position: absolute;
+      right: 16px;
+      bottom: 14px;
+      z-index: 10;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: rgba(7, 10, 24, 0.55);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #c8d3ff;
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 680px) {
+      .ui {
+        top: 12px;
+        left: 12px;
+        padding: 14px;
+      }
+
+      .ui h1 {
+        font-size: 1.2rem;
+      }
+
+      .credits {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="ui">
+      <h1>Sistema Solar 3D</h1>
+      <p>
+        Modelo 3D con Three.js. Usa el ratón para rotar, la rueda para hacer zoom
+        y el botón derecho para desplazar la vista.
+      </p>
+
+      <div class="controls">
+        <div class="row">
+          <label for="speed">
+            <span>Velocidad orbital</span>
+            <strong id="speedValue">1.0x</strong>
+          </label>
+          <input id="speed" type="range" min="0" max="3" step="0.05" value="1" />
+        </div>
+
+        <div class="buttons">
+          <button id="pauseBtn">Pausar</button>
+          <button id="resetBtn">Reiniciar cámara</button>
+        </div>
+      </div>
+
+      <div class="planet-info">
+        <strong>Vista:</strong> sistema solar simplificado en 3D, no a escala real.
+      </div>
+
+      <div class="hint">
+        Ratón izquierdo: orbitar · rueda: zoom · botón derecho: mover · táctil: arrastrar y pellizcar
+      </div>
+    </div>
+
+    <div class="credits">Three.js + OrbitControls</div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.166.1/build/three.module.js";
+    import { OrbitControls } from "https://unpkg.com/three@0.166.1/examples/jsm/controls/OrbitControls.js";
+
+    const app = document.getElementById("app");
+    const speedSlider = document.getElementById("speed");
+    const speedValue = document.getElementById("speedValue");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    let paused = false;
+    let speedMultiplier = parseFloat(speedSlider.value);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x02030a);
+
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      5000
+    );
+    camera.position.set(0, 120, 260);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    app.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.minDistance = 40;
+    controls.maxDistance = 1200;
+    controls.target.set(0, 0, 0);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.22);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.PointLight(0xffffff, 2.8, 0, 0);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+
+    const loader = new THREE.TextureLoader();
+
+    function createStars(count = 5000) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        const radius = 1200 + Math.random() * 1800;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+
+        positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = radius * Math.cos(phi);
+        positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      }
+
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+      const material = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 2.2,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      const stars = new THREE.Points(geometry, material);
+      scene.add(stars);
+    }
+
+    createStars();
+
+    function createOrbit(radius, color = 0x445577) {
+      const curve = new THREE.EllipseCurve(0, 0, radius, radius, 0, Math.PI * 2, false, 0);
+      const points = curve.getPoints(160);
+      const orbitGeometry = new THREE.BufferGeometry().setFromPoints(
+        points.map(p => new THREE.Vector3(p.x, 0, p.y))
+      );
+
+      const orbitMaterial = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.45
+      });
+
+      const orbit = new THREE.LineLoop(orbitGeometry, orbitMaterial);
+      orbit.rotation.x = 0;
+      scene.add(orbit);
+    }
+
+    function createPlanet({
+      name,
+      radius,
+      distance,
+      color,
+      speed,
+      y = 0,
+      emissive = 0x000000,
+      ring = null
+    }) {
+      const geometry = new THREE.SphereGeometry(radius, 48, 48);
+      const material = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.9,
+        metalness: 0.05,
+        emissive,
+        emissiveIntensity: emissive !== 0x000000 ? 0.6 : 0
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(distance, y, 0);
+      scene.add(mesh);
+
+      let ringMesh = null;
+
+      if (ring) {
+        const ringGeometry = new THREE.RingGeometry(ring.inner, ring.outer, 96);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+          color: ring.color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.75
+        });
+
+        ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+        ringMesh.rotation.x = Math.PI / 2.4;
+        mesh.add(ringMesh);
+      }
+
+      createOrbit(distance);
+
+      return {
+        name,
+        mesh,
+        distance,
+        speed,
+        angle: Math.random() * Math.PI * 2,
+        rotationSpeed: 0.003 + Math.random() * 0.01,
+        ringMesh
+      };
+    }
+
+    const sunGeometry = new THREE.SphereGeometry(16, 64, 64);
+    const sunMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffb347
+    });
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sun);
+
+    const sunGlowGeometry = new THREE.SphereGeometry(20, 64, 64);
+    const sunGlowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffa726,
+      transparent: true,
+      opacity: 0.18
+    });
+    const sunGlow = new THREE.Mesh(sunGlowGeometry, sunGlowMaterial);
+    scene.add(sunGlow);
+
+    const planets = [
+      createPlanet({
+        name: "Mercurio",
+        radius: 2.2,
+        distance: 28,
+        color: 0xa9a9a9,
+        speed: 0.038
+      }),
+      createPlanet({
+        name: "Venus",
+        radius: 3.8,
+        distance: 40,
+        color: 0xd8b36a,
+        speed: 0.028
+      }),
+      createPlanet({
+        name: "Tierra",
+        radius: 4.2,
+        distance: 56,
+        color: 0x3f82ff,
+        speed: 0.022
+      }),
+      createPlanet({
+        name: "Marte",
+        radius: 3.1,
+        distance: 72,
+        color: 0xc65d3a,
+        speed: 0.018
+      }),
+      createPlanet({
+        name: "Júpiter",
+        radius: 9.5,
+        distance: 102,
+        color: 0xcda06b,
+        speed: 0.010
+      }),
+      createPlanet({
+        name: "Saturno",
+        radius: 8.2,
+        distance: 138,
+        color: 0xd8c089,
+        speed: 0.0075,
+        ring: {
+          inner: 11,
+          outer: 17,
+          color: 0xcbb58a
+        }
+      }),
+      createPlanet({
+        name: "Urano",
+        radius: 6.2,
+        distance: 174,
+        color: 0x7fe7ea,
+        speed: 0.0055
+      }),
+      createPlanet({
+        name: "Neptuno",
+        radius: 6.0,
+        distance: 208,
+        color: 0x426dff,
+        speed: 0.0042
+      })
+    ];
+
+    const clock = new THREE.Clock();
+
+    speedSlider.addEventListener("input", () => {
+      speedMultiplier = parseFloat(speedSlider.value);
+      speedValue.textContent = `${speedMultiplier.toFixed(1)}x`;
+    });
+
+    pauseBtn.addEventListener("click", () => {
+      paused = !paused;
+      pauseBtn.textContent = paused ? "Reanudar" : "Pausar";
+    });
+
+    resetBtn.addEventListener("click", () => {
+      camera.position.set(0, 120, 260);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+
+      if (!paused) {
+        sun.rotation.y += 0.003;
+        sunGlow.rotation.y -= 0.0015;
+
+        planets.forEach(planet => {
+          planet.angle += planet.speed * speedMultiplier;
+          planet.mesh.position.x = Math.cos(planet.angle) * planet.distance;
+          planet.mesh.position.z = Math.sin(planet.angle) * planet.distance;
+          planet.mesh.rotation.y += planet.rotationSpeed + delta * 0.3;
+        });
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+  </script>
+</body>
+</html>
